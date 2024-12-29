@@ -1,6 +1,8 @@
 import json
 from multiprocessing import Process
+import random
 import signal
+import string
 import os, sys
 import time
 
@@ -48,12 +50,14 @@ if not os.path.exists('./data/config'):
     os.makedirs('./data/config')
 if not os.path.exists('./data/config/setting.json'):
     # 初始化settting.json
-    setting = {"username": "admin", "password": "admin", "telegram_bot_token": "", "telegram_user_id": ""}
+    password = ''.join(random.choices(string.ascii_letters + string.digits, k=10))
+    print("初始化setting.json，密码：{0}".format(password))
+    setting = {"username": "admin", "password": password, "telegram_bot_token": "", "telegram_user_id": ""}
     with open('./data/config/setting.json', mode='w', encoding='utf-8') as f:
         json.dump(setting, f)
 
 from cron import StartCron
-from server import StartServer
+from api import APIServer
 from watch import StartWatch
 
 if __name__ == '__main__':
@@ -62,8 +66,7 @@ if __name__ == '__main__':
     watchProcess.start()
     cronProcess = Process(target=StartCron)
     cronProcess.start()
-    # 启动web服务
-    webProcess = Process(target=StartServer)
+    webProcess = Process(target=APIServer)
     webProcess.start()
     print("所有服务启动完毕，阻塞主进程并等待其他信号")
     signal.signal(signal.SIGINT, stop)
