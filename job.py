@@ -1,5 +1,5 @@
-
 import argparse
+from pathlib import Path
 import shutil
 import signal
 import textwrap
@@ -297,17 +297,21 @@ class Job:
             raise e
 
     def get_dest_tree_list(self, base_dir: str, root_dir: str, dest_tree_list: list):
-        ### 获取目标路径目录树，用于处理差异
-        if not os.path.exists(root_dir):
+        # 使用 Path 对象处理路径
+        base_dir = Path(base_dir).resolve()
+        root_dir = Path(root_dir).resolve()
+        
+        if not root_dir.exists():
+            print("root_dir not exists")
             return dest_tree_list
-        dirs = os.listdir(root_dir)
-        for dir in dirs:
-            item = os.path.join(root_dir, dir)
-            dest_tree_list.append(item.lstrip(base_dir + os.sep))
-            if os.path.isfile(item):
-                # 如果是文件，则不用递归
-                continue
-            self.get_dest_tree_list(base_dir, item, dest_tree_list)
+        
+        for item in root_dir.iterdir():
+            relative_path = str(item.relative_to(base_dir))
+            dest_tree_list.append(relative_path)
+            
+            if item.is_dir():
+                self.get_dest_tree_list(base_dir, item, dest_tree_list)
+                
         return dest_tree_list
 
     def strm(self, path: str):

@@ -1,7 +1,7 @@
 from fastapi import FastAPI, Depends, HTTPException, Security
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from fastapi.middleware.cors import CORSMiddleware
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 import jwt as PyJWT
 from datetime import datetime, timedelta, timezone
 from typing import Optional, List
@@ -106,37 +106,35 @@ class SettingUpdate(BaseModel):
     telegram_bot_token: str
     telegram_user_id: str
 class AccountCookie(BaseModel):
-    cookie: str
-    name: str
+    cookie: str = Field(..., title="115账号cookie")
+    name: str = Field(..., title="115账号名称")
+    created_at: Optional[str] = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+    updated_at: Optional[str] = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+    status: Optional[int] = 0
+    key: Optional[str] = ""
 
 class TaskItem(BaseModel):
-    id_of_115: str
-    key: Optional[str] = ""
-    cloud_type: str
-    name: str
-    path: str
-    strm_root_path: str
-    mount_path: Optional[str] = ""
-    alist_server: Optional[str] = ""
-    alist_115_path: Optional[str] = ""
-    type: str
-    path_of_115: str
-    copy_meta_file: str
-    copy_delay: int = 1
-    webdav_url: Optional[str] = ""
-    webdav_username: Optional[str] = ""
-    webdav_password: Optional[str] = ""
-    sync_type: str
-    cron_str: Optional[str] = ""
-    # 默认值
-    strm_ext: List[str] = [
-        ".mkv", ".mp4", ".ts", ".avi", ".mov", ".mpeg", ".mpg", ".wmv", 
-        ".3gp", ".m4v", ".flv", ".m2ts", ".f4v", ".tp", ".iso"
-    ]
-    meta_ext: List[str] = [
-        ".jpg", ".jpeg", ".png", ".webp", ".nfo", ".srt", ".ass", 
-        ".svg", ".sup", ".lrc"
-    ]
+    id_of_115: str = Field("", title="115账号标识")
+    # key: Optional[str] = Field("", title="同步目录标识")
+    cloud_type: str = Field("115", title="网盘类型")
+    name: str = Field("任务1", title="任务名称")
+    path: str = Field("Media/电视剧/儿童", title="网盘资源路径")
+    strm_root_path: str = Field("./data/config/strm", title="strm根目录")
+    mount_path: Optional[str] = Field("", title="alist挂载根文件夹")
+    alist_server: Optional[str] = Field("", title="alist服务器地址")
+    alist_115_path: Optional[str] = Field("", title="alist中115路径")
+    type: str = Field("本地路径", title="同步类型") # 同步类型，'本地路径' | 'WebDAV' | 'alist302'
+    path_of_115: str = Field("/mnt/115", title="115挂载根目录")
+    copy_meta_file: int = Field(1, title="元数据选项") # 元数据选项：1-关闭，2-复制，3-软链接
+    copy_delay: int = Field(1, title="元数据复制间隔") 
+    webdav_url: Optional[str] = Field("", title="webdav服务器链接")
+    webdav_username: Optional[str] = Field("", title="webdav服务器用户名")
+    webdav_password: Optional[str] = Field("", title="webdav服务器密码")
+    sync_type: str = Field("手动", title="同步类型")
+    cron_str: Optional[str] = Field("", title="定时同步规则")
+    strm_ext: List[str] = Field(None, title="strm扩展名", examples=[".mkv", ".mp4"])
+    meta_ext: List[str] = Field(None, title="元数据扩展名", examples=[".jpg", ".jpeg", ".png"])
+    extra: Optional[dict] = Field(None, title="额外配置")
 
 # JWT相关函数
 def create_access_token(data: dict, expires_delta: Optional[timedelta] = None):
@@ -199,7 +197,7 @@ async def get_libs(_: str = Depends(verify_token)) -> Result:
 
 @app.post("/api/libs", response_model=Result, summary="添加同步目录", tags=["同步目录管理"])
 async def add_lib(data: TaskItem, _: str = Depends(verify_token)) -> Result:
-    rs, msg = LIBS.add(data)
+    rs, msg = LIBS.add(data.model_dump(exclude_unset=True))
     if not rs:
         raise HTTPException(status_code=500, detail=msg)
     return Result(code=200, msg="", data={})
@@ -268,17 +266,17 @@ async def get_oo5_list(_: str = Depends(verify_token)) -> Result:
 
 @app.post("/api/oo5list", response_model=Result, summary="添加115账号", tags=["115账号管理"])
 async def add_oo5(data: AccountCookie, _: str = Depends(verify_token)) -> Result:
-    rs, msg = o5List.add(data)
+    rs, msg = o5List.add(data.model_dump(exclude_unset=True))
     if not rs:
         raise HTTPException(status_code=500, detail=msg)
     return Result(code=200, msg="", data={})
 
 @app.get("/api/oo5/{key}", response_model=Result, summary="获取115账号详情", tags=["115账号管理"])
 async def get_oo5(key: str, _: str = Depends(verify_token)) -> Result:
-    oo5 = o5List.getLib(key)
+    oo5 = o5List.get(key)
     if oo5 is None:
         raise HTTPException(status_code=404, detail="115账号不存在")
-    return Result(code=200, msg="", data=oo5)
+    return Result(code=200, msg="", data=oo5.getJson())
 
 @app.delete("/api/oo5/{key}", summary="删除115账号", tags=["115账号管理"])
 async def delete_oo5(key: str, _: str = Depends(verify_token)) -> Result:
@@ -288,8 +286,8 @@ async def delete_oo5(key: str, _: str = Depends(verify_token)) -> Result:
     return Result(code=200, msg="", data={})
 
 @app.put("/api/oo5/{key}", response_model=Result, summary="更新115账号", tags=["115账号管理"])
-async def update_oo5(key: str, data: dict, _: str = Depends(verify_token)) -> Result:
-    rs, msg = o5List.updateOO5(key, data)
+async def update_oo5(key: str, data: AccountCookie, _: str = Depends(verify_token)) -> Result:
+    rs, msg = o5List.updateOO5(key, data.model_dump(exclude_unset=True))
     if not rs:
         raise HTTPException(status_code=500, detail=msg)
     return Result(code=200, msg="", data={})
