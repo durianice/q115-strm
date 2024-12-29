@@ -1,10 +1,9 @@
 name: docker images cicd
 # 触发器设置
 on:
+  workflow_dispatch:
   push:
-    branches: [ "main" ]
-  pull_request:
-    branches: [ "main" ]
+    branches: [ "deploy" ]
 
 # 项目任务，任务之间可以并行调度
 jobs:
