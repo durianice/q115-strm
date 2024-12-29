@@ -66,7 +66,7 @@ user_tokens = load_user_tokens()
 # 初始化
 app = FastAPI(
     title="115 Sync API",
-    description="115网盘同步工具API接口",
+    summary="115网盘同步工具API接口",
     version="1.0.0"
 )
 
@@ -84,6 +84,11 @@ app.add_middleware(
 )
 
 # 模型定义
+class Result(BaseModel):
+    code: int
+    msg: str
+    data: dict | str | list | None
+
 class Token(BaseModel):
     access_token: str
     token_type: str
@@ -95,17 +100,43 @@ class UserLogin(BaseModel):
     username: str
     password: str
 
-class LibUpdate(BaseModel):
-    name: Optional[str]
-    path: Optional[str]
-    cron: Optional[str]
-    status: Optional[int]
-
 class SettingUpdate(BaseModel):
     username: str
     password: str
     telegram_bot_token: str
     telegram_user_id: str
+class AccountCookie(BaseModel):
+    cookie: str
+    name: str
+
+class TaskItem(BaseModel):
+    id_of_115: str
+    key: Optional[str] = ""
+    cloud_type: str
+    name: str
+    path: str
+    strm_root_path: str
+    mount_path: Optional[str] = ""
+    alist_server: Optional[str] = ""
+    alist_115_path: Optional[str] = ""
+    type: str
+    path_of_115: str
+    copy_meta_file: str
+    copy_delay: int = 1
+    webdav_url: Optional[str] = ""
+    webdav_username: Optional[str] = ""
+    webdav_password: Optional[str] = ""
+    sync_type: str
+    cron_str: Optional[str] = ""
+    # 默认值
+    strm_ext: List[str] = [
+        ".mkv", ".mp4", ".ts", ".avi", ".mov", ".mpeg", ".mpg", ".wmv", 
+        ".3gp", ".m4v", ".flv", ".m2ts", ".f4v", ".tp", ".iso"
+    ]
+    meta_ext: List[str] = [
+        ".jpg", ".jpeg", ".png", ".webp", ".nfo", ".srt", ".ass", 
+        ".svg", ".sup", ".lrc"
+    ]
 
 # JWT相关函数
 def create_access_token(data: dict, expires_delta: Optional[timedelta] = None):
@@ -135,7 +166,7 @@ async def verify_token(credentials: HTTPAuthorizationCredentials = Security(secu
         raise HTTPException(status_code=401, detail="Could not validate credentials")
 
 # 路由定义
-@app.post("/api/token", response_model=Token)
+@app.post("/api/token", response_model=Token, summary="登录获取token", tags=["身份认证"])
 async def login_for_access_token(user_data: UserLogin):
     settings = Setting()
     if user_data.username != settings.username or user_data.password != settings.password:
@@ -161,41 +192,41 @@ async def login_for_access_token(user_data: UserLogin):
     
     return {"access_token": access_token, "token_type": "bearer"}
 
-@app.get("/api/libs")
-async def get_libs(_: str = Depends(verify_token)):
+@app.get("/api/libs", response_model=Result, summary="获取同步目录列表", tags=["同步目录管理"])
+async def get_libs(_: str = Depends(verify_token)) -> Result:
     data = [item.getJson() for item in LIBS.list()]
-    return {"code": 200, "msg": "", "data": data}
+    return Result(code=200, msg="", data=data)
 
-@app.post("/api/libs")
-async def add_lib(data: dict, _: str = Depends(verify_token)):
+@app.post("/api/libs", response_model=Result, summary="添加同步目录", tags=["同步目录管理"])
+async def add_lib(data: TaskItem, _: str = Depends(verify_token)) -> Result:
     rs, msg = LIBS.add(data)
     if not rs:
         raise HTTPException(status_code=500, detail=msg)
-    return {"code": 200, "msg": "", "data": {}}
+    return Result(code=200, msg="", data={})
 
-@app.get("/api/lib/{key}")
-async def get_lib(key: str, _: str = Depends(verify_token)):
+@app.get("/api/lib/{key}", response_model=Result, summary="获取同步目录详情", tags=["同步目录管理"])
+async def get_lib(key: str, _: str = Depends(verify_token)) -> Result:
     lib = LIBS.getLib(key)
     if lib is None:
         raise HTTPException(status_code=404, detail="同步目录不存在")
     return {"code": 200, "msg": "", "data": lib.getJson()}
 
-@app.delete("/api/lib/{key}")
-async def delete_lib(key: str, _: str = Depends(verify_token)):
+@app.delete("/api/lib/{key}", response_model=Result, summary="删除同步目录", tags=["同步目录管理"])
+async def delete_lib(key: str, _: str = Depends(verify_token)) -> Result:
     rs, msg = LIBS.deleteLib(key)
     if not rs:
         raise HTTPException(status_code=500, detail=msg)
     return {"code": 200, "msg": "", "data": {}}
 
-@app.put("/api/lib/{key}")
-async def update_lib(key: str, data: LibUpdate, _: str = Depends(verify_token)):
-    rs, msg = LIBS.updateLib(key, data.dict(exclude_unset=True))
+@app.put("/api/lib/{key}", response_model=Result, summary="更新同步目录", tags=["同步目录管理"])
+async def update_lib(key: str, data: TaskItem, _: str = Depends(verify_token)) -> Result:
+    rs, msg = LIBS.updateLib(key, data.model_dump(exclude_unset=True))
     if not rs:
         raise HTTPException(status_code=500, detail=msg)
     return {"code": 200, "msg": "", "data": {}}
 
-@app.post("/api/lib/sync/{key}")
-async def sync_lib(key: str, _: str = Depends(verify_token)):
+@app.post("/api/lib/sync/{key}", response_model=Result, summary="运行指定同步目录", tags=["同步目录管理"])
+async def sync_lib(key: str, _: str = Depends(verify_token)) -> Result:
     lib = LIBS.getLib(key)
     if lib is None:
         raise HTTPException(status_code=404, detail="同步目录不存在")
@@ -205,8 +236,8 @@ async def sync_lib(key: str, _: str = Depends(verify_token)):
     p1.start()
     return {"code": 200, "msg": "已启动任务", "data": {}}
 
-@app.post("/api/lib/stop/{key}")
-async def stop_lib(key: str, _: str = Depends(verify_token)):
+@app.post("/api/lib/stop/{key}", response_model=Result, summary="停止指定同步目录", tags=["同步目录管理"])
+async def stop_lib(key: str, _: str = Depends(verify_token)) -> Result:
     lib = LIBS.getLib(key)
     if lib is None:
         raise HTTPException(status_code=404, detail="同步目录不存在")
@@ -220,56 +251,56 @@ async def stop_lib(key: str, _: str = Depends(verify_token)):
         LIBS.saveExtra(lib)
     return {"code": 200, "msg": "已停止", "data": {}}
 
-@app.get("/api/lib/log/{key}")
-async def get_lib_log(key: str, _: str = Depends(verify_token)):
+@app.get("/api/lib/log/{key}", response_model=Result, summary="获取指定同步目录的日志", tags=["同步目录管理"])
+async def get_lib_log(key: str, _: str = Depends(verify_token)) -> Result:
     logFile = os.path.abspath(f"./data/logs/{key}.log")
     if not os.path.exists(logFile):
-        return {"code": 200, "msg": "", "data": ""}
+        return Result(code=200, msg="", data="")
     with open(logFile, mode='r', encoding='utf-8') as logfd:
         content = logfd.read()
     content = content.replace("\n", "<br />")
     return {"code": 200, "msg": "", "data": content}
 
-@app.get("/api/oo5list")
-async def get_oo5_list(_: str = Depends(verify_token)):
+@app.get("/api/oo5list", response_model=Result, summary="获取115账号列表", tags=["115账号管理"])
+async def get_oo5_list(_: str = Depends(verify_token)) -> Result:
     data = [item.getJson() for item in o5List.getList()]
-    return {"code": 200, "msg": "", "data": data}
+    return Result(code=200, msg="", data=data)
 
-@app.post("/api/oo5list")
-async def add_oo5(data: dict, _: str = Depends(verify_token)):
+@app.post("/api/oo5list", response_model=Result, summary="添加115账号", tags=["115账号管理"])
+async def add_oo5(data: AccountCookie, _: str = Depends(verify_token)) -> Result:
     rs, msg = o5List.add(data)
     if not rs:
         raise HTTPException(status_code=500, detail=msg)
-    return {"code": 200, "msg": "", "data": {}}
+    return Result(code=200, msg="", data={})
 
-@app.get("/api/oo5/{key}")
-async def get_oo5(key: str, _: str = Depends(verify_token)):
+@app.get("/api/oo5/{key}", response_model=Result, summary="获取115账号详情", tags=["115账号管理"])
+async def get_oo5(key: str, _: str = Depends(verify_token)) -> Result:
     oo5 = o5List.getLib(key)
     if oo5 is None:
         raise HTTPException(status_code=404, detail="115账号不存在")
-    return {"code": 200, "msg": "", "data": oo5}
+    return Result(code=200, msg="", data=oo5)
 
-@app.delete("/api/oo5/{key}")
-async def delete_oo5(key: str, _: str = Depends(verify_token)):
+@app.delete("/api/oo5/{key}", summary="删除115账号", tags=["115账号管理"])
+async def delete_oo5(key: str, _: str = Depends(verify_token)) -> Result:
     rs, msg = o5List.delOO5(key)
     if not rs:
         raise HTTPException(status_code=500, detail=msg)
-    return {"code": 200, "msg": "", "data": {}}
+    return Result(code=200, msg="", data={})
 
-@app.put("/api/oo5/{key}")
-async def update_oo5(key: str, data: dict, _: str = Depends(verify_token)):
+@app.put("/api/oo5/{key}", response_model=Result, summary="更新115账号", tags=["115账号管理"])
+async def update_oo5(key: str, data: dict, _: str = Depends(verify_token)) -> Result:
     rs, msg = o5List.updateOO5(key, data)
     if not rs:
         raise HTTPException(status_code=500, detail=msg)
-    return {"code": 200, "msg": "", "data": {}}
+    return Result(code=200, msg="", data={})
 
-@app.get("/api/settings")
-async def get_settings(_: str = Depends(verify_token)):
+@app.get("/api/settings", response_model=Result, summary="获取配置", tags=["配置管理"])
+async def get_settings(_: str = Depends(verify_token)) -> Result:
     settings = Setting()
-    return {"code": 200, "msg": "", "data": settings.__dict__}
+    return Result(code=200, msg="", data=settings.__dict__)
 
-@app.post("/api/settings")
-async def update_settings(data: SettingUpdate, _: str = Depends(verify_token)):
+@app.post("/api/settings", response_model=Result, summary="更新配置", tags=["配置管理"])
+async def update_settings(data: SettingUpdate, _: str = Depends(verify_token)) -> Result:
     if data.username == '' or data.password == '':
         raise HTTPException(status_code=500, detail="用户名密码不能为空")
     
@@ -288,20 +319,20 @@ async def update_settings(data: SettingUpdate, _: str = Depends(verify_token)):
                 status_code=500, 
                 detail=f'保存成功，但是Telegram通知配置出错：{msg}'
             )
-    return {"code": 200, "msg": "", "data": settings.__dict__}
+    return Result(code=200, msg="", data=settings.__dict__)
 
-@app.post("/api/dir")
-async def get_dirs(data: dict = {}, _: str = Depends(verify_token)):
+@app.post("/api/dir", response_model=Result, summary="获取目录列表", tags=["目录管理"])
+async def get_dirs(data: dict = {}, _: str = Depends(verify_token)) -> Result:
     base_dir = data.get('base_dir', '/')
     dirs = []
     for dir in os.listdir(base_dir):
         item = os.path.join(base_dir, dir)
         if not os.path.isfile(item):
             dirs.append(dir)
-    return {"code": 200, "msg": "", "data": dirs}
+    return Result(code=200, msg="", data=dirs)
 
-@app.get("/api/job")
-async def start_job(path: str, _: str = Depends(verify_token)):
+@app.get("/api/job", response_model=Result, summary="获取任务列表", tags=["任务管理"])
+async def start_job(path: str, _: str = Depends(verify_token)) -> Result:
     if not path:
         raise HTTPException(status_code=404, detail="同步目录不存在")
     
@@ -313,14 +344,14 @@ async def start_job(path: str, _: str = Depends(verify_token)):
     
     p1 = Process(target=StartJob, kwargs={'key': lib.key})
     p1.start()
-    return {
-        "code": 200, 
-        "msg": f'已启动任务，可调用API查询状态：/api/lib/{lib.key}', 
-        "data": {}
-    }
+    return Result(
+        code=200, 
+        msg=f'已启动任务，可调用API查询状态：/api/lib/{lib.key}', 
+        data={}
+    )
 
-@app.post("/api/logout")
-async def logout(credentials: HTTPAuthorizationCredentials = Security(security)):
+@app.post("/api/logout", response_model=Result, summary="注销", tags=["身份认证"])
+async def logout(credentials: HTTPAuthorizationCredentials = Security(security)) -> Result:
     try:
         # 解码token获取用户名
         payload = PyJWT.decode(credentials.credentials, SECRET_KEY, algorithms=[ALGORITHM])
@@ -337,11 +368,7 @@ async def logout(credentials: HTTPAuthorizationCredentials = Security(security))
     token_blacklist[today.date()].add(credentials.credentials)
     save_blacklist(token_blacklist)
     
-    return {
-        "code": 200,
-        "msg": "已注销",
-        "data": {}
-    }
+    return Result(code=200, msg="已注销", data={})
 
 def APIServer(host: str = "0.0.0.0", port: int = 11566):
     import uvicorn
