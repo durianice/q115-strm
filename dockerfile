@@ -1,5 +1,5 @@
 FROM python:3.12-slim
-EXPOSE 12123
+EXPOSE 11566
 WORKDIR /app
 
 ENV PATH=/app:$PATH
@@ -9,10 +9,13 @@ ENV TZ="Asia/Shanghai"
 #   && sed -i 's/deb.debian.org/mirrors.aliyun.com/g' /etc/apt/sources.list.d/debian.sources
 RUN apt update && apt install -y git cron
 
-COPY . .
-RUN chmod -R 0755 /app/frontend/*
+RUN curl -sSL https://install.python-poetry.org | python3 -
+ENV PATH="/root/.local/bin:$PATH"
 
-RUN pip install -r requirements.txt
+COPY . .
+
+RUN poetry config virtualenvs.create false \
+  && poetry install --no-dev --no-interaction --no-ansi
 
 VOLUME ["/app/data"]
 
