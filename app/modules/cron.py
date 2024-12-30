@@ -5,8 +5,8 @@ import os
 import time
 from crontab import CronTab
 
-from lib import TABFILE, Libs
-from log import getLogger
+from app.core.lib import TABFILE, Libs
+from app.utils.log import getLogger
 
 cronSubProc: Process | None = None
 logger = getLogger(name='cron', rotating=True, stream=True)

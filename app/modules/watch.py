@@ -8,8 +8,8 @@ from watchdog.observers.api import ObservedWatch
 from watchdog.events import *
 import os, sys
 
-from lib import Lib, Libs
-from log import getLogger
+from app.core.lib import Lib, Libs
+from app.utils.log import getLogger
 
 LIBS = Libs()
 logger = getLogger(name='watch', rotating=True, stream=True)

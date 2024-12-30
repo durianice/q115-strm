@@ -10,11 +10,11 @@ import psutil
 
 from p115client import P115Client, tool
 import telegramify_markdown
-from lib import OO5, GetNow, Lib, Libs, OO5List, Setting, TGBot
+from app.core.lib import OO5, GetNow, Lib, Libs, OO5List, Setting, TGBot
 import os, logging, sys
 from telegramify_markdown import customize
 
-from log import getLogger
+from app.utils.log import getLogger
 from telebot import apihelper
 proxyHost = os.getenv('PROXY_HOST', '')
 if proxyHost != '':
