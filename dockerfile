@@ -1,8 +1,8 @@
 FROM python:3.12-slim
 EXPOSE 11566
-WORKDIR /app
+WORKDIR /root
 
-ENV PATH=/app:$PATH
+ENV PATH=/root:$PATH
 ENV TZ="Asia/Shanghai"
 
 # RUN cp /etc/apt/sources.list.d/debian.sources /etc/apt/sources.list.d/debian.sources.bak \
@@ -17,6 +17,6 @@ COPY . .
 RUN poetry config virtualenvs.create false \
   && poetry install --no-dev --no-interaction --no-ansi
 
-VOLUME ["/app/data"]
+VOLUME ["/root/data"]
 
-ENTRYPOINT ["python", "main.py"]
+ENTRYPOINT ["python", "app/main.py"]
